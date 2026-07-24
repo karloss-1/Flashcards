@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Japanese Decks</title>
+
+<style>
+
+:root{
+--bg:#111;
+--card:#1c1c1c;
+--text:#f4f4f4;
+--muted:#9e9e9e;
+--accent:#4aa3ff;
+--easy:#2ecc71;
+--good:#f1c40f;
+--hard:#e74c3c;
+}
+
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+
+body{
+
+background:var(--bg);
+color:var(--text);
+
+display:flex;
+justify-content:center;
+
+padding:30px;
+
+}
+
+main{
+
+width:100%;
+max-width:760px;
+
+}
+
+h1{
+
+text-align:center;
+margin-bottom:10px;
+
+}
+
+#deckName{
+
+text-align:center;
+color:var(--muted);
+margin-bottom:20px;
+
+}
+
+#loader{
+
+margin-bottom:20px;
+
+display:flex;
+gap:10px;
+flex-wrap:wrap;
+
+}
+
+.card{
+
+background:var(--card);
+
+padding:40px;
+
+border-radius:20px;
+
+min-height:340px;
+
+display:flex;
+
+justify-content:center;
+
+align-items:center;
+
+cursor:pointer;
+
+text-align:center;
+
+}
+
+#front{
+
+font-size:42px;
+font-weight:bold;
+
+}
+
+#back{
+
+display:none;
+
+}
+
+#meaning{
+
+font-size:32px;
+margin-bottom:25px;
+
+}
+
+.example{
+
+background:#282828;
+
+padding:12px;
+
+margin-top:10px;
+
+border-radius:12px;
+
+font-size:20px;
+
+}
+
+#progress{
+
+margin:20px 0;
+
+text-align:center;
+
+color:var(--muted);
+
+}
+
+.buttons{
+
+display:grid;
+
+grid-template-columns:repeat(3,1fr);
+
+gap:10px;
+
+margin-top:20px;
+
+}
+
+button{
+
+padding:14px;
+
+font-size:17px;
+
+border:none;
+
+border-radius:12px;
+
+cursor:pointer;
+
+}
+
+.easy{background:var(--easy);}
+.good{background:var(--good);}
+.hard{background:var(--hard);color:white;}
+
+.nav{
+
+display:grid;
+grid-template-columns:1fr 1fr;
+
+gap:10px;
+
+margin-top:15px;
+
+}
+
+.mode{
+
+margin-top:15px;
+
+width:100%;
+
+background:var(--accent);
+
+color:white;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<main>
+
+<h1>🇯🇵 Japanese Decks</h1>
+
+<div id="deckName">No deck loaded</div>
+
+<div id="loader">
+
+<input type="file" id="file" accept=".json">
+
+<button onclick="loadExample()">Load Example Deck</button>
+
+</div>
+
+<div id="progress"></div>
+
+<div class="card" id="card">
+
+<div id="front"></div>
+
+<div id="back">
+
+<div id="meaning"></div>
+
+<div class="example" id="ex1"></div>
+
+<div class="example" id="ex2"></div>
+
+</div>
+
+</div>
+
+<div class="buttons">
+
+<button class="easy" onclick="grade('easy')">😄 Fácil</button>
+
+<button class="good" onclick="grade('good')">😐 Bien</button>
+
+<button class="hard" onclick="grade('hard')">😵 Difícil</button>
+
+</div>
+
+<div class="nav">
+
+<button onclick="previous()">◀ Prev</button>
+
+<button onclick="next()">Next ▶</button>
+
+</div>
+
+<button class="mode" onclick="toggleMode()">
+
+Cambiar modo
+
+</button>
+
+</main>
+
+<script>
+
+let deck=null
+
+let order=[]
+
+let queue=[]
+
+let current=0
+
+let showing=false
+
+let mode="recognition"
+
+const front=document.getElementById("front")
+const back=document.getElementById("back")
+const meaning=document.getElementById("meaning")
+const ex1=document.getElementById("ex1")
+const ex2=document.getElementById("ex2")
+const progress=document.getElementById("progress")
+const deckName=document.getElementById("deckName")
+
+const exampleDeck={
+
+title:"Expresiones",
+
+cards:[
+
+{
+
+front:"kekkyoku",
+
+back:"Al final",
+
+examples:[
+
+"Kekkyoku ikanakatta.",
+
+"Kekkyoku sore o katta."
+
+]
+
+},
+
+{
+
+front:"sekkaku ~ no ni",
+
+back:"Qué desperdicio que...",
+
+examples:[
+
+"Sekkaku Nihon ni kita no ni.",
+
+"Sekkaku yasumi na no ni."
+
+]
+
+},
+
+{
+
+front:"sanzan na",
+
+back:"Desastroso",
+
+examples:[
+
+"Sanzan na ichinichi.",
+
+"Sanzan na kekka."
+
+]
+
+}
+
+]
+
+}
+
+function loadExample(){
+
+loadDeck(exampleDeck)
+
+}
+
+function loadDeck(data){
+
+deck=data
+
+deckName.textContent=deck.title
+
+order=[]
+
+for(let i=0;i<deck.cards.length;i++)
+
+order.push(i)
+
+queue=[]
+
+current=0
+
+showing=false
+
+render()
+
+}
+
+function render(){
+
+if(!deck)return
+
+let c=deck.cards[order[current]]
+
+progress.textContent=(current+1)+" / "+order.length
+
+if(mode=="recognition"){
+
+front.textContent=c.front
+
+meaning.textContent=c.back
+
+}
+
+else{
+
+front.textContent=c.back
+
+meaning.textContent=c.front
+
+}
+
+ex1.textContent=c.examples[0]
+
+ex2.textContent=c.examples[1]
+
+front.style.display=showing?"none":"block"
+
+back.style.display=showing?"block":"none"
+
+save()
+
+}
+
+card.onclick=function(){
+
+showing=!showing
+
+render()
+
+}
+
+function next(){
+
+if(!deck)return
+
+showing=false
+
+current++
+
+if(current>=order.length){
+
+current=0
+
+if(queue.length){
+
+order.push(...queue)
+
+queue=[]
+
+}
+
+}
+
+render()
+
+}
+
+function previous(){
+
+if(!deck)return
+
+showing=false
+
+current--
+
+if(current<0)
+
+current=order.length-1
+
+render()
+
+}
+
+function toggleMode(){
+
+mode=mode=="recognition"
+
+?"production"
+
+:"recognition"
+
+showing=false
+
+render()
+
+}
+
+function grade(result){
+
+if(result=="hard")
+
+queue.push(order[current])
+
+next()
+
+}
+
+document.addEventListener("keydown",e=>{
+
+if(e.code=="Space"){
+
+e.preventDefault()
+
+showing=!showing
+
+render()
+
+}
+
+if(e.key=="ArrowRight")next()
+
+if(e.key=="ArrowLeft")previous()
+
+})
+
+file.addEventListener("change",e=>{
+
+const reader=new FileReader()
+
+reader.onload=function(){
+
+const json=JSON.parse(reader.result)
+
+loadDeck(json)
+
+}
+
+reader.readAsText(e.target.files[0])
+
+})
+
+function save(){
+
+if(!deck)return
+
+localStorage.setItem("jpdeck",JSON.stringify({
+
+deck,
+
+order,
+
+queue,
+
+current,
+
+mode
+
+}))
+
+}
+
+function restore(){
+
+const s=localStorage.getItem("jpdeck")
+
+if(!s)return
+
+const d=JSON.parse(s)
+
+deck=d.deck
+
+order=d.order
+
+queue=d.queue
+
+current=d.current
+
+mode=d.mode
+
+deckName.textContent=deck.title
+
+render()
+
+}
+
+restore()
+
+</script>
+
+</body>
+</html>
