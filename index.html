@@ -69,6 +69,94 @@ flex-wrap:wrap;
 
 }
 
+#loader button{
+background:#282828;
+color:var(--text);
+}
+
+.deck-list{
+width:100%;
+display:grid;
+gap:10px;
+}
+
+.deck-row{
+display:grid;
+grid-template-columns:1fr auto;
+gap:10px;
+}
+
+.deck-list button{
+text-align:left;
+}
+
+.delete-deck{
+background:#282828!important;
+color:var(--text);
+}
+
+.import-deck{
+width:100%;
+background:var(--accent)!important;
+color:white!important;
+}
+
+.empty-message{
+color:var(--muted);
+}
+
+.resume-dialog{
+position:fixed;
+inset:0;
+background:rgba(0,0,0,.7);
+display:none;
+align-items:center;
+justify-content:center;
+padding:20px;
+z-index:10;
+}
+
+.resume-dialog.visible{
+display:flex;
+}
+
+.resume-box{
+background:var(--card);
+border-radius:20px;
+padding:28px;
+width:100%;
+max-width:360px;
+text-align:center;
+}
+
+.resume-box p{
+font-size:22px;
+margin-bottom:20px;
+}
+
+.resume-box button{
+width:100%;
+margin-top:10px;
+background:var(--accent);
+color:white;
+}
+
+.resume-box button:last-child{
+background:#282828;
+}
+
+.delete-box p{
+font-size:16px;
+line-height:1.5;
+margin-bottom:12px;
+}
+
+.delete-box ul{
+text-align:left;
+margin:0 0 18px 22px;
+color:var(--muted);
+}
+
 .card{
 
 background:var(--card);
@@ -201,12 +289,10 @@ color:white;
 <div id="deckName">No deck loaded</div>
 
 <div id="loader">
-
-<input type="file" id="file" accept=".json">
-
-<button onclick="loadExample()">Load Example Deck</button>
-
+<div class="empty-message">Loading decks…</div>
 </div>
+
+<input type="file" id="importFile" accept=".json,application/json" hidden>
 
 <div id="progress"></div>
 
@@ -250,6 +336,28 @@ Cambiar modo
 
 </button>
 
+<div class="resume-dialog" id="resumeDialog">
+<div class="resume-box">
+<p>Resume previous session?</p>
+<button onclick="continueSession()">Continue</button>
+<button onclick="startOver()">Start over</button>
+</div>
+
+<div class="resume-dialog" id="deleteDialog">
+<div class="resume-box delete-box">
+<p id="deleteMessage"></p>
+<p>This will permanently remove:</p>
+<ul>
+<li>the deck</li>
+<li>its study history</li>
+<li>its review statistics</li>
+</ul>
+<button onclick="cancelDelete()">Cancel</button>
+<button onclick="confirmDelete()">Delete</button>
+</div>
+</div>
+</div>
+
 </main>
 
 <script>
@@ -266,6 +374,17 @@ let showing=false
 
 let mode="recognition"
 
+let deckId=""
+
+let seenToday={}
+
+let pendingSession=null
+let deckToDelete=null
+
+const sessionKey="jpdeck-session"
+const historyKey="jpdeck-history"
+const libraryKey="jpdeck-local-library"
+
 const front=document.getElementById("front")
 const back=document.getElementById("back")
 const meaning=document.getElementById("meaning")
@@ -273,6 +392,11 @@ const ex1=document.getElementById("ex1")
 const ex2=document.getElementById("ex2")
 const progress=document.getElementById("progress")
 const deckName=document.getElementById("deckName")
+const loader=document.getElementById("loader")
+const resumeDialog=document.getElementById("resumeDialog")
+const importFile=document.getElementById("importFile")
+const deleteDialog=document.getElementById("deleteDialog")
+const deleteMessage=document.getElementById("deleteMessage")
 
 const exampleDeck={
 
@@ -338,6 +462,7 @@ loadDeck(exampleDeck)
 
 }
 
+/* Previous study flow kept here as a reference while the functions below provide the persisted scheduler.
 function loadDeck(data){
 
 deck=data
@@ -470,23 +595,7 @@ next()
 
 }
 
-document.addEventListener("keydown",e=>{
-
-if(e.code=="Space"){
-
-e.preventDefault()
-
-showing=!showing
-
-render()
-
-}
-
-if(e.key=="ArrowRight")next()
-
-if(e.key=="ArrowLeft")previous()
-
-})
+const file=document.createElement("input")
 
 file.addEventListener("change",e=>{
 
@@ -550,6 +659,323 @@ render()
 
 restore()
 
+*/
+
+/* Session, spaced review, and automatic deck library */
+function cardKey(index){
+const c=deck.cards[index]
+return c.front+"\u0000"+c.back
+}
+
+function history(){
+try{return JSON.parse(localStorage.getItem(historyKey))||{}}catch(e){return {}}
+}
+
+function score(index){
+const all=history()
+return all[deckId]&&all[deckId][cardKey(index)]||0
+}
+
+function changeScore(index,amount){
+const all=history()
+all[deckId]=all[deckId]||{}
+const key=cardKey(index)
+all[deckId][key]=(all[deckId][key]||0)+amount
+localStorage.setItem(historyKey,JSON.stringify(all))
+}
+
+function newOrder(){
+const cards=deck.cards.map((_,index)=>index)
+cards.sort((a,b)=>score(a)-score(b)||Math.random()-.5)
+const selected=cards.filter(index=>{
+const s=score(index)
+return s<4||Math.random()<(s>=8?.25:.5)
+})
+return selected.length?selected:[cards[0]]
+}
+
+function loadDeck(data,id){
+deck=data
+deckId=id||data.title
+deckName.textContent=deck.title
+order=newOrder()
+queue=[]
+current=0
+showing=false
+seenToday={}
+render()
+}
+
+function render(){
+if(!deck)return
+if(!order.length){
+if(queue.length){
+order=queue
+queue=[]
+current=0
+}else{
+progress.textContent="Session complete"
+front.textContent="Done for today"
+front.style.display="block"
+back.style.display="none"
+localStorage.removeItem(sessionKey)
+localStorage.removeItem("jpdeck")
+return
+}
+}
+current=Math.max(0,Math.min(current,order.length-1))
+const c=deck.cards[order[current]]
+progress.textContent=(current+1)+" / "+order.length+(queue.length?" + "+queue.length+" review":"")
+if(mode=="recognition"){
+front.textContent=c.front
+meaning.textContent=c.back
+}else{
+front.textContent=c.back
+meaning.textContent=c.front
+}
+ex1.textContent=c.examples[0]||""
+ex2.textContent=c.examples[1]||""
+front.style.display=showing?"none":"block"
+back.style.display=showing?"block":"none"
+save()
+}
+
+card.onclick=function(){
+if(!deck||!order.length)return
+showing=!showing
+render()
+}
+
+function next(){
+if(!deck||!order.length)return
+showing=false
+current=(current+1)%order.length
+render()
+}
+
+function previous(){
+if(!deck||!order.length)return
+showing=false
+current=(current-1+order.length)%order.length
+render()
+}
+
+function toggleMode(){
+if(!deck)return
+mode=mode=="recognition"?"production":"recognition"
+showing=false
+render()
+}
+
+function grade(result){
+if(!deck||!order.length)return
+const index=order[current]
+seenToday[index]=(seenToday[index]||0)+1
+order.splice(current,1)
+if(result=="easy")changeScore(index,1)
+if(result=="good"){
+changeScore(index,.25)
+if(seenToday[index]==1&&Math.random()<.3)queue.push(index)
+}
+if(result=="hard"){
+changeScore(index,-1)
+const distance=6+Math.floor(Math.random()*3)
+order.splice(Math.min(current+distance,order.length),0,index)
+}
+if(current>=order.length)current=0
+showing=false
+render()
+}
+
+function save(){
+if(!deck||!order.length)return
+localStorage.setItem(sessionKey,JSON.stringify({deck,deckId,order,queue,current,mode,showing,seenToday}))
+}
+
+function readSession(){
+try{return JSON.parse(localStorage.getItem(sessionKey)||localStorage.getItem("jpdeck"))}catch(e){return null}
+}
+
+function restore(){
+pendingSession=readSession()
+
+if(!pendingSession||!pendingSession.deck||!pendingSession.order||!pendingSession.order.length)return
+
+if(!pendingSession.deckId||!findDeck(pendingSession.deckId)){
+localStorage.removeItem(sessionKey)
+localStorage.removeItem("jpdeck")
+pendingSession=null
+return
+}
+
+resumeDialog.classList.add("visible")
+}
+
+function continueSession(){
+if(!pendingSession)return
+deck=pendingSession.deck
+deckId=pendingSession.deckId||deck.title
+order=pendingSession.order
+queue=pendingSession.queue||[]
+current=pendingSession.current||0
+mode=pendingSession.mode||"recognition"
+showing=!!pendingSession.showing
+seenToday=pendingSession.seenToday||{}
+deckName.textContent=deck.title
+resumeDialog.classList.remove("visible")
+pendingSession=null
+render()
+}
+
+function startOver(){
+localStorage.removeItem(sessionKey)
+localStorage.removeItem("jpdeck")
+pendingSession=null
+resumeDialog.classList.remove("visible")
+}
+
+function showDecks(decks){
+loader.innerHTML='<button class="import-deck" onclick="importDeck()">Import Deck</button><div class="deck-list"></div>'
+const deckList=loader.lastElementChild
+
+if(!decks.length){
+deckList.innerHTML='<div class="empty-message">No decks imported yet.</div>'
+return
+}
+
+decks.forEach(item=>{
+const row=document.createElement("div")
+row.className="deck-row"
+
+const button=document.createElement("button")
+button.textContent=item.title
+button.onclick=()=>loadDeck(item.data,"local:"+item.id)
+
+const remove=document.createElement("button")
+remove.className="delete-deck"
+remove.textContent="Delete"
+remove.onclick=()=>askDelete(item)
+
+row.append(button,remove)
+deckList.appendChild(row)
+})
+}
+
+function localLibrary(){
+try{return JSON.parse(localStorage.getItem(libraryKey))||[]}catch(e){return []}
+}
+
+function saveLibrary(decks){
+localStorage.setItem(libraryKey,JSON.stringify(decks))
+}
+
+function findDeck(id){
+const localId=id.replace(/^local:/,"")
+return localLibrary().find(item=>item.id==localId)
+}
+
+function validateDeck(data){
+return data&&typeof data.title=="string"&&data.title.trim()&&Array.isArray(data.cards)&&data.cards.every(card=>
+card&&typeof card.front=="string"&&typeof card.back=="string"&&Array.isArray(card.examples)
+)
+}
+
+function importDeck(){
+importFile.click()
+}
+
+importFile.addEventListener("change",e=>{
+const selected=e.target.files[0]
+if(!selected)return
+
+const reader=new FileReader()
+reader.onload=()=>{
+try{
+const data=JSON.parse(reader.result)
+
+if(!validateDeck(data))throw new Error()
+
+const decks=localLibrary()
+decks.push({
+id:Date.now().toString(36)+Math.random().toString(36).slice(2),
+title:data.title,
+data
+})
+
+saveLibrary(decks)
+showDecks(decks)
+}catch(err){
+alert("This file is not a valid deck.")
+}
+
+importFile.value=""
+}
+
+reader.readAsText(selected)
+})
+
+function askDelete(item){
+deckToDelete=item
+deleteMessage.textContent='Delete "'+item.title+'"?'
+deleteDialog.classList.add("visible")
+}
+
+function cancelDelete(){
+deckToDelete=null
+deleteDialog.classList.remove("visible")
+}
+
+function confirmDelete(){
+if(!deckToDelete)return
+
+const id="local:"+deckToDelete.id
+const decks=localLibrary().filter(item=>item.id!=deckToDelete.id)
+saveLibrary(decks)
+
+const all=history()
+delete all[id]
+localStorage.setItem(historyKey,JSON.stringify(all))
+
+const session=readSession()
+if(session&&session.deckId==id){
+localStorage.removeItem(sessionKey)
+localStorage.removeItem("jpdeck")
+}
+
+if(deckId==id){
+deck=null
+deckId=""
+order=[]
+queue=[]
+current=0
+showing=false
+deckName.textContent="No deck loaded"
+progress.textContent=""
+front.textContent=""
+back.style.display="none"
+}
+
+deckToDelete=null
+deleteDialog.classList.remove("visible")
+showDecks(decks)
+}
+
+function loadDeckLibrary(){
+showDecks(localLibrary())
+}
+
+document.addEventListener("keydown",e=>{
+if(e.code=="Space"&&deck){
+e.preventDefault()
+showing=!showing
+render()
+}
+if(e.key=="ArrowRight")next()
+if(e.key=="ArrowLeft")previous()
+})
+
+restore()
+loadDeckLibrary()
 </script>
 
 </body>
