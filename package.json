@@ -1,0 +1,14 @@
+{
+  "name": "japanese-flashcards",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline Japanese flashcards with local decks and FSRS 5.4.1",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:browser": "node --test tests/browser.test.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  },
+  "packageManager": "pnpm@11.19.0"
+}

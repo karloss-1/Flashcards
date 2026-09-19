@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "japanese-greetings",
+  "title": "Japanese · Greetings",
+  "cards": [
+    {
+      "id": "hello",
+      "front": {"text": "Hello / good afternoon"},
+      "back": {"text": "こんにちは", "example": "Konnichiwa"}
+    },
+    {
+      "id": "thank-you",
+      "front": "Thank you",
+      "back": {"text": "ありがとう", "example": "Arigatō"}
+    }
+  ]
+}
