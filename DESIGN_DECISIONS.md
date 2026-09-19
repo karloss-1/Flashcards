@@ -69,10 +69,10 @@ Adaptaciones necesarias: colecciones estáticas → decks locales; escritura de 
 
 - localStorage: `japanese-flashcards:selected-deck` y `japanese-flashcards:new-limit`. Solo preferencias; si localStorage falla, el estudio con IndexedDB sigue siendo posible.
 - BroadcastChannel: `japanese-flashcards:changes`, para refrescar otras pestañas.
-- Caché: `japanese-flashcards:<scope>:v1`; limpieza limitada al mismo prefijo y scope. No elimina cachés de otras apps.
+- Caché: `japanese-flashcards:<scope>:v3`; limpieza limitada al mismo prefijo y scope. No elimina cachés de otras apps.
 - Manifest `id`, `start_url` y `scope`: `./`. Registro `./sw.js` con scope `./`. Puede instalarse bajo `/Flashcards/` sin controlar rutas hermanas.
 - Precache del shell completo, incluyendo FSRS local y todos los módulos. Sin CDN, fetch de decks o fuentes externas.
-- Caché de una versión coherente del shell. Un nuevo worker espera al cierre de pestañas antiguas; no mezcla módulos de dos versiones mediante una activación inmediata. Incrementar la versión de caché cuando cambie el shell.
+- Caché de una versión coherente del shell. Cuando cambia el shell, el nuevo worker se activa de inmediato para que una instalación existente no conserve assets visuales obsoletos; la siguiente navegación usa la versión precacheada completa. Incrementar la versión de caché cuando cambie el shell.
 - Los decks no van a Cache Storage: viven en IndexedDB. El worker solo atiende recursos de su origen/scope y no busca coincidencias en cachés ajenas.
 
 El namespace IndexedDB es independiente de las otras aplicaciones, pero dos despliegues de Japanese Flashcards en el mismo origen comparten la misma base intencionadamente; no se promete aislamiento entre dos copias de esta misma aplicación.
